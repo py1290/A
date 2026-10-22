@@ -1,1 +1,894 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#38bdf8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AOH 2027">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="بازی استراتژیک Age of History 2027 با نقشه واقعی جهان">
+<title>Age of History 2027</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap');
+:root {
+    --bg: #0b1120; --panel: #1e293b; --border: #334155;
+    --primary: #38bdf8; --success: #22c55e; --danger: #ef4444;
+    --warning: #f59e0b; --text: #e2e8f0; --muted: #94a3b8;
+}
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Vazirmatn', sans-serif; }
+body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+.container { display: grid; grid-template-columns: 300px 1fr 280px; height: 100vh; }
+.panel {
+    background: var(--panel); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+}
+.panel h3 { color: var(--primary); font-size: 1.05rem; border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 2px; }
+.stat-row { display: flex; justify-content: space-between; font-size: 0.88rem; padding: 3px 0; border-bottom: 1px solid rgba(51,65,85,0.35); }
+.stat-row .val { font-weight: 600; }
+#map { height: 100%; width: 100%; background: #0c1929; }
+.top-bar {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;
+    background: rgba(30,41,59,0.93); border: 1px solid var(--border); border-radius: 12px;
+    padding: 8px 20px; display: flex; gap: 20px; align-items: center; backdrop-filter: blur(8px);
+}
+.top-bar h2 { color: var(--primary); font-size: 1.2rem; margin: 0; }
+.top-bar .time { color: var(--muted); font-size: 0.9rem; }
+.btn {
+    background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; border: none;
+    padding: 10px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+    transition: 0.2s; width: 100%;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.btn-success { background: linear-gradient(135deg, #22c55e, #16a34a); }
+.btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.btn-secondary { background: #334155; }
+.log-box {
+    background: #0f172a; border: 1px solid var(--border); border-radius: 8px;
+    height: 160px; overflow-y: auto; padding: 8px; font-size: 0.82rem; line-height: 1.45; flex: 1;
+}
+.log-box p { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #1e293b; }
+.log-success { color: #4ade80; } .log-danger { color: #f87171; }
+.log-info { color: #38bdf8; } .log-warning { color: #fbbf24; }
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 2000; justify-content: center; align-items: center; }
+.modal.active { display: flex; }
+.modal-content {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px; width: 92%; max-width: 400px;
+}
+.modal-content h3 { color: var(--primary); margin-bottom: 12px; }
+.modal-content select, .modal-content input {
+    width: 100%; padding: 9px; margin-bottom: 10px; border-radius: 7px;
+    border: 1px solid var(--border); background: #0f172a; color: var(--text); font-size: 0.95rem;
+}
+.modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.info-text { color: var(--muted); font-size: 0.84rem; margin-bottom: 8px; }
+.country-player { fill: #16a34a !important; stroke: #4ade80; stroke-width: 1.4; }
+.country-ally   { fill: #2563eb !important; stroke: #60a5fa; stroke-width: 1.1; }
+.country-enemy  { fill: #b91c1c !important; stroke: #f87171; stroke-width: 1.1; }
+.country-neutral{ fill: #475569 !important; stroke: #64748b; stroke-width: 0.5; }
+.country-shape { cursor: pointer; transition: fill 0.25s; }
+.country-shape:hover { filter: brightness(1.22); }
+.select-screen {
+    position: fixed; inset: 0; background: var(--bg); z-index: 3000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
+}
+.select-screen h1 {
+    font-size: 2.3rem; background: linear-gradient(90deg,#38bdf8,#818cf8);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 6px;
+}
+.countries-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px; max-width: 960px; max-height: 62vh; overflow-y: auto; margin: 18px 0; width: 100%;
+}
+.country-card {
+    background: var(--panel); border: 2px solid var(--border); border-radius: 10px;
+    padding: 11px; cursor: pointer; text-align: center; transition: 0.18s;
+}
+.country-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+.country-card.selected { border-color: var(--success); background: rgba(34,197,94,0.13); }
+.search-box {
+    width: 100%; max-width: 400px; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid var(--border); background: #0f172a; color: var(--text);
+    font-size: 1rem; margin-bottom: 8px; text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div class="select-screen" id="select-screen">
+    <h1>🌍 Age of History 2027</h1>
+    <p style="color:var(--muted); margin-bottom:8px;">همه کشورها • نقشه سبک و سریع • جنگ و اقتصاد</p>
+    <input type="text" class="search-box" id="search-country" placeholder="جستجوی کشور...">
+    <div class="countries-grid" id="countries-list"></div>
+    <button class="btn" id="start-btn" disabled style="width:auto; padding:12px 40px; font-size:1.05rem;">شروع بازی</button>
+</div>
+
+<div class="container" id="game-container" style="display:none;">
+    <div class="panel">
+        <h3>📊 وضعیت کشور</h3>
+        <div class="stat-row"><span>👥 جمعیت</span><span class="val" id="s-pop">0</span></div>
+        <div class="stat-row"><span>⚔️ ارتش</span><span class="val" id="s-army">0</span></div>
+        <div class="stat-row"><span>💰 GDP</span><span class="val" id="s-gdp">0</span></div>
+        <div class="stat-row"><span>🏭 صنعت</span><span class="val" id="s-ind">0</span></div>
+        <div class="stat-row"><span>⛽ نفت</span><span class="val" id="s-oil">0</span></div>
+        <div class="stat-row"><span>📈 ثبات</span><span class="val" id="s-stab">0%</span></div>
+        <div class="stat-row"><span>🔬 تکنولوژی</span><span class="val" id="s-tech">0</span></div>
+        <div class="stat-row"><span>💵 خزانه</span><span class="val" id="s-treasury">0</span></div>
+        <div class="stat-row"><span>📥 درآمد</span><span class="val" id="s-income">0</span></div>
+        <h3 style="margin-top:10px;">🤝 روابط</h3>
+        <div style="font-size:0.84rem; line-height:1.55;">
+            <div>متحدین: <span id="s-allies" style="color:#38bdf8">—</span></div>
+            <div>دشمنان: <span id="s-enemies" style="color:#f87171">—</span></div>
+        </div>
+        <h3 style="margin-top:10px;">📜 گزارش</h3>
+        <div class="log-box" id="log"></div>
+    </div>
+
+    <div style="position:relative;">
+        <div class="top-bar">
+            <h2 id="player-title">—</h2>
+            <div class="time">سال <span id="year">۲۰۲۷</span> • ماه <span id="month">۱</span> • نوبت <span id="turn">۱</span></div>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <div class="panel">
+        <h3>⚔️ فرمان‌ها</h3>
+        <button class="btn" onclick="openModal('recruit')">استخدام نیرو</button>
+        <button class="btn" onclick="openModal('build')">سرمایه‌گذاری صنعتی</button>
+        <button class="btn" onclick="improveTech()">تحقیق تکنولوژی (۸۰)</button>
+        <button class="btn btn-danger" onclick="openModal('war')">اعلام جنگ</button>
+        <button class="btn btn-danger" onclick="openModal('battle')">حمله نظامی</button>
+        <button class="btn btn-success" onclick="openModal('diplo')">دیپلماسی</button>
+        <button class="btn btn-warning" onclick="openModal('trade')">قرارداد تجاری</button>
+        <button class="btn btn-secondary" onclick="nextTurn()">⏭ نوبت بعد (۳ ماه)</button>
+        <div style="margin-top:12px; font-size:0.8rem; color:var(--muted);">
+            <p>💡 روی کشورها کلیک کنید.</p>
+            <p>سبز = شما • آبی = متحد • قرمز = دشمن</p>
+        </div>
+    </div>
+</div>
+
+<!-- مودال‌ها -->
+<div class="modal" id="modal-recruit">
+    <div class="modal-content">
+        <h3>استخدام نیرو</h3>
+        <p class="info-text">هر واحد = ۲۰ خزانه</p>
+        <input type="number" id="recruit-amount" min="1" placeholder="تعداد واحد">
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeModal('recruit')">انصراف</button>
+            <button class="btn" onclick="recruitArmy()">تأیید</button>
+        </div>
+    </div>
+</div>
+<div class="modal" id="modal-build">
+    <div class="modal-content">
+        <h3>سرمایه‌گذاری صنعتی</h3>
+        <p class="info-text">هزینه: ۱۵۰ خزانه • صنعت +۳ تا +۷</p>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeModal('build')">انصراف</button>
+            <button class="btn" onclick="buildIndustry()">سرمایه‌گذاری</button>
+        </div>
+    </div>
+</div>
+<div class="modal" id="modal-war">
+    <div class="modal-content">
+        <h3>اعلام جنگ</h3>
+        <select id="war-target"></select>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeModal('war')">انصراف</button>
+            <button class="btn btn-danger" onclick="declareWar()">اعلام جنگ</button>
+        </div>
+    </div>
+</div>
+<div class="modal" id="modal-battle">
+    <div class="modal-content">
+        <h3>حمله نظامی</h3>
+        <select id="battle-target"></select>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeModal('battle')">انصراف</button>
+            <button class="btn btn-danger" onclick="fightBattle()">حمله!</button>
+        </div>
+    </div>
+</div>
+<div class="modal" id="modal-diplo">
+    <div class="modal-content">
+        <h3>دیپلماسی</h3>
+        <select id="diplo-action">
+            <option value="ally">پیشنهاد اتحاد</option>
+            <option value="peace">درخواست صلح</option>
+        </select>
+        <select id="diplo-target"></select>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeModal('diplo')">انصراف</button>
+            <button class="btn btn-success" onclick="doDiplomacy()">انجام</button>
+        </div>
+    </div>
+</div>
+<div class="modal" id="modal-trade">
+    <div class="modal-content">
+        <h3>قرارداد تجاری</h3>
+        <select id="trade-target"></select>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeModal('trade')">انصراف</button>
+            <button class="btn btn-warning" onclick="makeTrade()">امضا</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ========== داده‌های پیش‌فرض قوی برای کشورهای مهم ==========
+const predefined = {
+    "United States of America": {name:"آمریکا", pop:340, army:1450, gdp:28000, ind:95, oil:18, stab:76, tech:96, treasury:1200},
+    "China": {name:"چین", pop:1410, army:2050, gdp:22000, ind:88, oil:15, stab:81, tech:89, treasury:980},
+    "Russia": {name:"روسیه", pop:145, army:920, gdp:2300, ind:60, oil:55, stab:64, tech:79, treasury:350},
+    "India": {name:"هند", pop:1450, army:1480, gdp:4500, ind:58, oil:4, stab:71, tech:73, treasury:320},
+    "Germany": {name:"آلمان", pop:84, army:185, gdp:4800, ind:92, oil:2, stab:83, tech:91, treasury:510},
+    "France": {name:"فرانسه", pop:68, army:215, gdp:3200, ind:80, oil:1, stab:79, tech:88, treasury:380},
+    "United Kingdom": {name:"انگلیس", pop:68, army:165, gdp:3600, ind:78, oil:5, stab:81, tech:90, treasury:420},
+    "Japan": {name:"ژاپن", pop:123, army:255, gdp:4200, ind:90, oil:0, stab:86, tech:94, treasury:450},
+    "Brazil": {name:"برزیل", pop:216, army:370, gdp:2100, ind:55, oil:12, stab:67, tech:66, treasury:280},
+    "Iran": {name:"ایران", pop:90, army:590, gdp:480, ind:42, oil:35, stab:61, tech:71, treasury:180},
+    "Turkey": {name:"ترکیه", pop:87, army:460, gdp:1150, ind:55, oil:3, stab:73, tech:76, treasury:210},
+    "Saudi Arabia": {name:"عربستان", pop:37, army:255, gdp:1100, ind:40, oil:60, stab:76, tech:69, treasury:600},
+    "Australia": {name:"استرالیا", pop:27, army:90, gdp:1700, ind:72, oil:8, stab:87, tech:84, treasury:290},
+    "Canada": {name:"کانادا", pop:40, army:75, gdp:2200, ind:78, oil:25, stab:88, tech:86, treasury:340},
+    "South Korea": {name:"کره جنوبی", pop:52, army:500, gdp:1800, ind:85, oil:0, stab:82, tech:92, treasury:310},
+    "North Korea": {name:"کره شمالی", pop:26, army:1200, gdp:40, ind:25, oil:0, stab:55, tech:55, treasury:40},
+    "Italy": {name:"ایتالیا", pop:59, army:170, gdp:2100, ind:75, oil:1, stab:72, tech:82, treasury:260},
+    "Spain": {name:"اسپانیا", pop:48, army:130, gdp:1600, ind:70, oil:0, stab:75, tech:80, treasury:240},
+    "Mexico": {name:"مکزیک", pop:130, army:280, gdp:1400, ind:55, oil:15, stab:65, tech:68, treasury:200},
+    "Indonesia": {name:"اندونزی", pop:280, army:400, gdp:1400, ind:50, oil:8, stab:68, tech:62, treasury:190},
+    "Pakistan": {name:"پاکستان", pop:240, army:650, gdp:350, ind:38, oil:1, stab:55, tech:60, treasury:90},
+    "Egypt": {name:"مصر", pop:110, army:450, gdp:400, ind:40, oil:5, stab:60, tech:58, treasury:110},
+    "Nigeria": {name:"نیجریه", pop:220, army:150, gdp:450, ind:35, oil:20, stab:50, tech:45, treasury:100},
+    "South Africa": {name:"آفریقای جنوبی", pop:60, army:80, gdp:400, ind:55, oil:2, stab:62, tech:65, treasury:120},
+    "Argentina": {name:"آرژانتین", pop:46, army:90, gdp:600, ind:50, oil:6, stab:58, tech:68, treasury:100},
+    "Poland": {name:"لهستان", pop:38, army:150, gdp:700, ind:65, oil:1, stab:78, tech:75, treasury:150},
+    "Ukraine": {name:"اوکراین", pop:38, army:300, gdp:200, ind:40, oil:2, stab:45, tech:62, treasury:60},
+    "Israel": {name:"اسرائیل", pop:10, army:180, gdp:500, ind:80, oil:0, stab:70, tech:95, treasury:180},
+    "Sweden": {name:"سوئد", pop:10, army:30, gdp:650, ind:85, oil:0, stab:90, tech:92, treasury:200},
+    "Norway": {name:"نروژ", pop:5.5, army:25, gdp:500, ind:80, oil:30, stab:92, tech:90, treasury:250},
+    "Netherlands": {name:"هلند", pop:18, army:40, gdp:1000, ind:88, oil:2, stab:88, tech:91, treasury:220},
+    "Belgium": {name:"بلژیک", pop:12, army:30, gdp:600, ind:82, oil:0, stab:85, tech:88, treasury:160},
+    "Switzerland": {name:"سوئیس", pop:9, army:20, gdp:800, ind:90, oil:0, stab:95, tech:94, treasury:280},
+    "Austria": {name:"اتریش", pop:9, army:25, gdp:500, ind:80, oil:0, stab:90, tech:88, treasury:150},
+    "Greece": {name:"یونان", pop:10, army:140, gdp:220, ind:55, oil:0, stab:60, tech:70, treasury:70},
+    "Portugal": {name:"پرتغال", pop:10, army:30, gdp:280, ind:60, oil:0, stab:80, tech:75, treasury:90},
+    "Czech Republic": {name:"چک", pop:11, army:30, gdp:350, ind:75, oil:0, stab:85, tech:82, treasury:110},
+    "Romania": {name:"رومانی", pop:19, army:70, gdp:300, ind:55, oil:3, stab:70, tech:68, treasury:80},
+    "Hungary": {name:"مجارستان", pop:10, army:30, gdp:200, ind:60, oil:0, stab:75, tech:72, treasury:70},
+    "Finland": {name:"فنلاند", pop:5.5, army:30, gdp:300, ind:80, oil:0, stab:90, tech:90, treasury:130},
+    "Denmark": {name:"دانمارک", pop:6, army:20, gdp:400, ind:82, oil:2, stab:92, tech:89, treasury:140},
+    "Ireland": {name:"ایرلند", pop:5, army:10, gdp:500, ind:85, oil:0, stab:90, tech:88, treasury:160},
+    "New Zealand": {name:"نیوزیلند", pop:5, army:15, gdp:250, ind:70, oil:1, stab:92, tech:82, treasury:100},
+    "Singapore": {name:"سنگاپور", pop:6, army:70, gdp:400, ind:90, oil:0, stab:95, tech:95, treasury:200},
+    "Malaysia": {name:"مالزی", pop:34, army:130, gdp:400, ind:60, oil:8, stab:75, tech:70, treasury:120},
+    "Thailand": {name:"تایلند", pop:70, army:300, gdp:500, ind:55, oil:2, stab:68, tech:65, treasury:110},
+    "Vietnam": {name:"ویتنام", pop:100, army:450, gdp:400, ind:50, oil:3, stab:72, tech:60, treasury:90},
+    "Philippines": {name:"فیلیپین", pop:115, army:150, gdp:400, ind:45, oil:1, stab:65, tech:58, treasury:80},
+    "Bangladesh": {name:"بنگلادش", pop:170, army:200, gdp:400, ind:40, oil:0, stab:60, tech:50, treasury:70},
+    "Iraq": {name:"عراق", pop:45, army:200, gdp:250, ind:30, oil:40, stab:40, tech:50, treasury:80},
+    "Syria": {name:"سوریه", pop:22, army:150, gdp:50, ind:20, oil:5, stab:30, tech:40, treasury:20},
+    "Afghanistan": {name:"افغانستان", pop:40, army:100, gdp:20, ind:15, oil:0, stab:25, tech:30, treasury:15},
+    "Kazakhstan": {name:"قزاقستان", pop:20, army:80, gdp:200, ind:45, oil:25, stab:70, tech:60, treasury:90},
+    "Uzbekistan": {name:"ازبکستان", pop:35, army:60, gdp:80, ind:35, oil:2, stab:65, tech:50, treasury:40},
+    "Azerbaijan": {name:"آذربایجان", pop:10, army:70, gdp:70, ind:40, oil:15, stab:65, tech:55, treasury:50},
+    "Georgia": {name:"گرجستان", pop:3.7, army:25, gdp:25, ind:35, oil:0, stab:60, tech:55, treasury:25},
+    "Armenia": {name:"ارمنستان", pop:3, army:45, gdp:15, ind:30, oil:0, stab:55, tech:55, treasury:20},
+    "Chile": {name:"شیلی", pop:19, army:70, gdp:300, ind:60, oil:1, stab:75, tech:70, treasury:90},
+    "Colombia": {name:"کلمبیا", pop:52, army:300, gdp:350, ind:45, oil:8, stab:55, tech:55, treasury:80},
+    "Peru": {name:"پرو", pop:34, army:90, gdp:250, ind:40, oil:2, stab:60, tech:55, treasury:60},
+    "Venezuela": {name:"ونزوئلا", pop:28, army:150, gdp:100, ind:25, oil:50, stab:30, tech:40, treasury:30},
+    "Cuba": {name:"کوبا", pop:11, army:50, gdp:100, ind:30, oil:0, stab:70, tech:50, treasury:40},
+    "Algeria": {name:"الجزایر", pop:45, army:150, gdp:200, ind:40, oil:20, stab:60, tech:55, treasury:70},
+    "Morocco": {name:"مراکش", pop:37, army:200, gdp:140, ind:45, oil:0, stab:70, tech:55, treasury:60},
+    "Ethiopia": {name:"اتیوپی", pop:120, army:150, gdp:120, ind:25, oil:0, stab:50, tech:35, treasury:30},
+    "Kenya": {name:"کنیا", pop:55, army:30, gdp:100, ind:35, oil:0, stab:55, tech:45, treasury:40},
+    "Ghana": {name:"غنا", pop:33, army:15, gdp:80, ind:30, oil:2, stab:65, tech:40, treasury:30},
+    "Tanzania": {name:"تانزانیا", pop:65, army:30, gdp:70, ind:25, oil:0, stab:60, tech:35, treasury:25},
+    "Democratic Republic of the Congo": {name:"کنگو دموکراتیک", pop:100, army:100, gdp:50, ind:20, oil:2, stab:30, tech:25, treasury:20},
+    "Angola": {name:"آنگولا", pop:35, army:100, gdp:80, ind:30, oil:25, stab:45, tech:35, treasury:40},
+    "Sudan": {name:"سودان", pop:45, army:100, gdp:30, ind:20, oil:5, stab:25, tech:30, treasury:15},
+    "Libya": {name:"لیبی", pop:7, army:40, gdp:40, ind:25, oil:30, stab:25, tech:40, treasury:30},
+    "Yemen": {name:"یمن", pop:33, army:50, gdp:20, ind:15, oil:2, stab:20, tech:25, treasury:10},
+    "Oman": {name:"عمان", pop:5, army:40, gdp:80, ind:40, oil:15, stab:80, tech:60, treasury:70},
+    "Qatar": {name:"قطر", pop:3, army:15, gdp:200, ind:50, oil:30, stab:85, tech:70, treasury:150},
+    "United Arab Emirates": {name:"امارات", pop:10, army:65, gdp:500, ind:70, oil:25, stab:85, tech:80, treasury:250},
+    "Kuwait": {name:"کویت", pop:4.5, army:20, gdp:150, ind:45, oil:40, stab:80, tech:65, treasury:120},
+    "Bahrain": {name:"بحرین", pop:1.5, army:10, gdp:40, ind:50, oil:5, stab:80, tech:70, treasury:50},
+    "Jordan": {name:"اردن", pop:11, army:100, gdp:50, ind:40, oil:0, stab:65, tech:60, treasury:40},
+    "Lebanon": {name:"لبنان", pop:5, army:60, gdp:20, ind:30, oil:0, stab:30, tech:55, treasury:15},
+    "Belarus": {name:"بلاروس", pop:9, army:50, gdp:70, ind:45, oil:0, stab:55, tech:60, treasury:30},
+    "Bulgaria": {name:"بلغارستان", pop:7, army:30, gdp:80, ind:50, oil:0, stab:70, tech:65, treasury:40},
+    "Serbia": {name:"صربستان", pop:7, army:30, gdp:60, ind:45, oil:0, stab:60, tech:60, treasury:30},
+    "Croatia": {name:"کرواسی", pop:4, army:15, gdp:70, ind:55, oil:0, stab:75, tech:70, treasury:40},
+    "Slovakia": {name:"اسلواکی", pop:5.5, army:15, gdp:120, ind:65, oil:0, stab:80, tech:75, treasury:50},
+    "Slovenia": {name:"اسلوونی", pop:2.1, army:7, gdp:60, ind:70, oil:0, stab:85, tech:80, treasury:40},
+    "Lithuania": {name:"لیتوانی", pop:2.8, army:20, gdp:70, ind:65, oil:0, stab:80, tech:75, treasury:40},
+    "Latvia": {name:"لتونی", pop:1.9, army:8, gdp:40, ind:60, oil:0, stab:80, tech:72, treasury:30},
+    "Estonia": {name:"استونی", pop:1.3, army:7, gdp:40, ind:75, oil:0, stab:85, tech:85, treasury:35},
+    "Iceland": {name:"ایسلند", pop:0.4, army:0.5, gdp:30, ind:70, oil:0, stab:95, tech:85, treasury:40},
+    "Luxembourg": {name:"لوکزامبورگ", pop:0.65, army:1, gdp:80, ind:85, oil:0, stab:95, tech:90, treasury:60},
+    "Malta": {name:"مالت", pop:0.5, army:2, gdp:20, ind:65, oil:0, stab:90, tech:75, treasury:25},
+    "Cyprus": {name:"قبرس", pop:1.2, army:12, gdp:30, ind:60, oil:0, stab:75, tech:70, treasury:25},
+    "Mongolia": {name:"مغولستان", pop:3.4, army:15, gdp:15, ind:25, oil:1, stab:70, tech:40, treasury:20},
+    "Nepal": {name:"نپال", pop:30, army:95, gdp:40, ind:25, oil:0, stab:55, tech:35, treasury:20},
+    "Sri Lanka": {name:"سری‌لانکا", pop:22, army:250, gdp:80, ind:40, oil:0, stab:55, tech:50, treasury:25},
+    "Myanmar": {name:"میانمار", pop:55, army:400, gdp:70, ind:25, oil:2, stab:30, tech:35, treasury:20},
+    "Cambodia": {name:"کامبوج", pop:17, army:120, gdp:30, ind:25, oil:0, stab:55, tech:35, treasury:15},
+    "Laos": {name:"لائوس", pop:7.5, army:50, gdp:15, ind:20, oil:0, stab:60, tech:30, treasury:10},
+    "Papua New Guinea": {name:"پاپوآ گینه نو", pop:10, army:5, gdp:25, ind:20, oil:2, stab:50, tech:25, treasury:15},
+    "Fiji": {name:"فیجی", pop:0.9, army:4, gdp:5, ind:30, oil:0, stab:70, tech:40, treasury:10},
+    "Jamaica": {name:"جامائیکا", pop:3, army:3, gdp:15, ind:35, oil:0, stab:60, tech:45, treasury:15},
+    "Trinidad and Tobago": {name:"ترینیداد و توباگو", pop:1.4, army:4, gdp:25, ind:40, oil:10, stab:70, tech:50, treasury:25},
+    "Panama": {name:"پاناما", pop:4.4, army:0, gdp:70, ind:50, oil:0, stab:75, tech:60, treasury:40},
+    "Costa Rica": {name:"کاستاریکا", pop:5.2, army:0, gdp:70, ind:55, oil:0, stab:85, tech:65, treasury:40},
+    "Guatemala": {name:"گواتمالا", pop:18, army:20, gdp:80, ind:30, oil:0, stab:50, tech:40, treasury:25},
+    "Honduras": {name:"هندوراس", pop:10, army:15, gdp:30, ind:25, oil:0, stab:45, tech:35, treasury:15},
+    "El Salvador": {name:"السالوادور", pop:6.5, army:20, gdp:30, ind:30, oil:0, stab:50, tech:40, treasury:15},
+    "Nicaragua": {name:"نیکاراگوئه", pop:7, army:15, gdp:15, ind:25, oil:0, stab:45, tech:35, treasury:10},
+    "Bolivia": {name:"بولیوی", pop:12, army:35, gdp:40, ind:30, oil:2, stab:55, tech:40, treasury:20},
+    "Paraguay": {name:"پاراگوئه", pop:7.5, army:20, gdp:40, ind:30, oil:0, stab:60, tech:40, treasury:20},
+    "Uruguay": {name:"اروگوئه", pop:3.5, army:20, gdp:60, ind:50, oil:0, stab:80, tech:65, treasury:40},
+    "Ecuador": {name:"اکوادور", pop:18, army:40, gdp:110, ind:40, oil:8, stab:55, tech:50, treasury:35},
+    "Guyana": {name:"گویان", pop:0.8, army:3, gdp:15, ind:25, oil:15, stab:65, tech:40, treasury:25},
+    "Suriname": {name:"سورینام", pop:0.6, army:2, gdp:4, ind:25, oil:2, stab:60, tech:35, treasury:10},
+    "Madagascar": {name:"ماداگاسکار", pop:30, army:15, gdp:15, ind:20, oil:0, stab:50, tech:25, treasury:10},
+    "Mozambique": {name:"موزامبیک", pop:32, army:15, gdp:15, ind:20, oil:2, stab:45, tech:25, treasury:10},
+    "Zambia": {name:"زامبیا", pop:20, army:15, gdp:25, ind:25, oil:0, stab:55, tech:30, treasury:15},
+    "Zimbabwe": {name:"زیمبابوه", pop:16, army:30, gdp:25, ind:25, oil:0, stab:40, tech:35, treasury:10},
+    "Botswana": {name:"بوتسوانا", pop:2.6, army:10, gdp:20, ind:40, oil:0, stab:80, tech:50, treasury:25},
+    "Namibia": {name:"نامیبیا", pop:2.6, army:10, gdp:15, ind:35, oil:0, stab:70, tech:45, treasury:20},
+    "Senegal": {name:"سنگال", pop:18, army:20, gdp:30, ind:30, oil:0, stab:60, tech:40, treasury:20},
+    "Ivory Coast": {name:"ساحل عاج", pop:28, army:25, gdp:70, ind:35, oil:2, stab:55, tech:40, treasury:25},
+    "Cameroon": {name:"کامرون", pop:28, army:20, gdp:45, ind:30, oil:5, stab:50, tech:35, treasury:20},
+    "Uganda": {name:"اوگاندا", pop:47, army:50, gdp:40, ind:25, oil:1, stab:50, tech:30, treasury:15},
+    "Rwanda": {name:"رواندا", pop:14, army:35, gdp:15, ind:30, oil:0, stab:70, tech:40, treasury:15},
+    "Burundi": {name:"بوروندی", pop:13, army:30, gdp:4, ind:15, oil:0, stab:40, tech:25, treasury:5},
+    "Somalia": {name:"سومالی", pop:17, army:20, gdp:8, ind:10, oil:0, stab:15, tech:15, treasury:5},
+    "Eritrea": {name:"اریتره", pop:3.7, army:200, gdp:3, ind:10, oil:0, stab:40, tech:20, treasury:5},
+    "Djibouti": {name:"جیبوتی", pop:1, army:10, gdp:4, ind:25, oil:0, stab:60, tech:35, treasury:10},
+    "Mauritania": {name:"موریتانی", pop:4.5, army:15, gdp:8, ind:20, oil:0, stab:50, tech:30, treasury:10},
+    "Mali": {name:"مالی", pop:22, army:15, gdp:20, ind:20, oil:0, stab:30, tech:25, treasury:10},
+    "Niger": {name:"نیجر", pop:26, army:10, gdp:15, ind:15, oil:1, stab:40, tech:20, treasury:8},
+    "Chad": {name:"چاد", pop:18, army:30, gdp:12, ind:15, oil:5, stab:30, tech:20, treasury:8},
+    "Central African Republic": {name:"جمهوری آفریقای مرکزی", pop:5.5, army:10, gdp:3, ind:10, oil:0, stab:20, tech:15, treasury:3},
+    "Gabon": {name:"گابن", pop:2.4, army:5, gdp:20, ind:30, oil:10, stab:60, tech:40, treasury:25},
+    "Congo": {name:"کنگو", pop:5.5, army:10, gdp:12, ind:25, oil:5, stab:40, tech:30, treasury:12},
+    "Equatorial Guinea": {name:"گینه استوایی", pop:1.7, army:2, gdp:12, ind:25, oil:15, stab:45, tech:30, treasury:20},
+    "Guinea": {name:"گینه", pop:14, army:10, gdp:15, ind:20, oil:0, stab:40, tech:25, treasury:10},
+    "Sierra Leone": {name:"سیرالئون", pop:8.5, army:8, gdp:4, ind:15, oil:0, stab:45, tech:25, treasury:5},
+    "Liberia": {name:"لیبریا", pop:5.3, army:2, gdp:4, ind:15, oil:0, stab:50, tech:25, treasury:5},
+    "Togo": {name:"توگو", pop:9, army:10, gdp:8, ind:20, oil:0, stab:55, tech:30, treasury:8},
+    "Benin": {name:"بنین", pop:13, army:5, gdp:18, ind:25, oil:0, stab:60, tech:30, treasury:10},
+    "Burkina Faso": {name:"بورکینافاسو", pop:23, army:10, gdp:20, ind:20, oil:0, stab:40, tech:25, treasury:8},
+    "Gambia": {name:"گامبیا", pop:2.7, army:2, gdp:2, ind:20, oil:0, stab:55, tech:30, treasury:5},
+    "Guinea-Bissau": {name:"گینه بیسائو", pop:2.1, army:4, gdp:2, ind:15, oil:0, stab:40, tech:20, treasury:3},
+    "Cape Verde": {name:"کیپ ورد", pop:0.6, army:1, gdp:2, ind:30, oil:0, stab:75, tech:40, treasury:8},
+    "Sao Tome and Principe": {name:"سائوتومه و پرنسیپ", pop:0.2, army:0.5, gdp:0.5, ind:20, oil:0, stab:70, tech:30, treasury:3},
+    "Comoros": {name:"کومور", pop:0.9, army:0.5, gdp:1.5, ind:20, oil:0, stab:55, tech:25, treasury:3},
+    "Mauritius": {name:"موریس", pop:1.3, army:2, gdp:15, ind:50, oil:0, stab:85, tech:60, treasury:25},
+    "Seychelles": {name:"سیشل", pop:0.1, army:0.5, gdp:2, ind:40, oil:0, stab:85, tech:55, treasury:10},
+    "Maldives": {name:"مالدیو", pop:0.5, army:5, gdp:5, ind:35, oil:0, stab:70, tech:45, treasury:15},
+    "Bhutan": {name:"بوتان", pop:0.8, army:8, gdp:3, ind:25, oil:0, stab:80, tech:40, treasury:10},
+    "Brunei": {name:"برونئی", pop:0.45, army:7, gdp:15, ind:40, oil:15, stab:85, tech:55, treasury:40},
+    "Timor-Leste": {name:"تیمور شرقی", pop:1.3, army:2, gdp:2, ind:20, oil:5, stab:55, tech:30, treasury:8},
+    "Solomon Islands": {name:"جزایر سلیمان", pop:0.7, army:0, gdp:1.5, ind:15, oil:0, stab:55, tech:25, treasury:5},
+    "Vanuatu": {name:"وانواتو", pop:0.3, army:0, gdp:1, ind:20, oil:0, stab:70, tech:30, treasury:5},
+    "Samoa": {name:"ساموآ", pop:0.2, army:0, gdp:0.8, ind:25, oil:0, stab:75, tech:35, treasury:5},
+    "Tonga": {name:"تونگا", pop:0.1, army:0, gdp:0.5, ind:20, oil:0, stab:75, tech:30, treasury:3},
+    "Kiribati": {name:"کیریباتی", pop:0.12, army:0, gdp:0.2, ind:15, oil:0, stab:70, tech:25, treasury:2},
+    "Micronesia": {name:"میکرونزی", pop:0.1, army:0, gdp:0.4, ind:20, oil:0, stab:70, tech:30, treasury:3},
+    "Marshall Islands": {name:"جزایر مارشال", pop:0.06, army:0, gdp:0.25, ind:20, oil:0, stab:70, tech:30, treasury:3},
+    "Palau": {name:"پالائو", pop:0.02, army:0, gdp:0.3, ind:25, oil:0, stab:80, tech:40, treasury:5},
+    "Nauru": {name:"نائورو", pop:0.01, army:0, gdp:0.1, ind:15, oil:0, stab:70, tech:25, treasury:2},
+    "Tuvalu": {name:"تووالو", pop:0.01, army:0, gdp:0.05, ind:15, oil:0, stab:75, tech:25, treasury:2},
+    "Antigua and Barbuda": {name:"آنتیگوا و باربودا", pop:0.1, army:0, gdp:1.5, ind:30, oil:0, stab:75, tech:40, treasury:8},
+    "Barbados": {name:"باربادوس", pop:0.3, army:0.5, gdp:5, ind:40, oil:0, stab:80, tech:50, treasury:15},
+    "Dominica": {name:"دومینیکا", pop:0.07, army:0, gdp:0.6, ind:25, oil:0, stab:75, tech:35, treasury:5},
+    "Grenada": {name:"گرنادا", pop:0.11, army:0, gdp:1.2, ind:30, oil:0, stab:75, tech:40, treasury:6},
+    "Saint Kitts and Nevis": {name:"سنت کیتس و نویس", pop:0.05, army:0, gdp:1, ind:30, oil:0, stab:80, tech:40, treasury:6},
+    "Saint Lucia": {name:"سنت لوسیا", pop:0.18, army:0, gdp:2, ind:30, oil:0, stab:75, tech:40, treasury:8},
+    "Saint Vincent and the Grenadines": {name:"سنت وینسنت", pop:0.11, army:0, gdp:0.9, ind:25, oil:0, stab:70, tech:35, treasury:5},
+    "Belize": {name:"بلیز", pop:0.4, army:1.5, gdp:3, ind:25, oil:0, stab:65, tech:35, treasury:8},
+    "Bahamas": {name:"باهاما", pop:0.4, army:1.5, gdp:12, ind:40, oil:0, stab:80, tech:50, treasury:20},
+    "Haiti": {name:"هائیتی", pop:11.5, army:0, gdp:20, ind:15, oil:0, stab:25, tech:20, treasury:5},
+    "Dominican Republic": {name:"جمهوری دومینیکن", pop:11, army:50, gdp:100, ind:40, oil:0, stab:60, tech:50, treasury:30},
+    "Cuba": {name:"کوبا", pop:11, army:50, gdp:100, ind:30, oil:0, stab:70, tech:50, treasury:40},
+    "Jamaica": {name:"جامائیکا", pop:3, army:3, gdp:15, ind:35, oil:0, stab:60, tech:45, treasury:15},
+    "Trinidad and Tobago": {name:"ترینیداد", pop:1.4, army:4, gdp:25, ind:40, oil:10, stab:70, tech:50, treasury:25},
+    "Guyana": {name:"گویان", pop:0.8, army:3, gdp:15, ind:25, oil:15, stab:65, tech:40, treasury:25},
+    "Suriname": {name:"سورینام", pop:0.6, army:2, gdp:4, ind:25, oil:2, stab:60, tech:35, treasury:10}
+};
+
+// نام‌های فارسی برای کشورهای بدون تعریف
+const persianNames = {
+    "Afghanistan": "افغانستان", "Albania": "آلبانی", "Algeria": "الجزایر", "Angola": "آنگولا",
+    "Argentina": "آرژانتین", "Armenia": "ارمنستان", "Australia": "استرالیا", "Austria": "اتریش",
+    "Azerbaijan": "آذربایجان", "Bangladesh": "بنگلادش", "Belarus": "بلاروس", "Belgium": "بلژیک",
+    "Belize": "بلیز", "Benin": "بنین", "Bhutan": "بوتان", "Bolivia": "بولیوی",
+    "Bosnia and Herzegovina": "بوسنی", "Botswana": "بوتسوانا", "Brazil": "برزیل", "Brunei": "برونئی",
+    "Bulgaria": "بلغارستان", "Burkina Faso": "بورکینافاسو", "Burundi": "بوروندی", "Cambodia": "کامبوج",
+    "Cameroon": "کامرون", "Canada": "کانادا", "Central African Republic": "جمهوری آفریقای مرکزی",
+    "Chad": "چاد", "Chile": "شیلی", "China": "چین", "Colombia": "کلمبیا", "Costa Rica": "کاستاریکا",
+    "Croatia": "کرواسی", "Cuba": "کوبا", "Cyprus": "قبرس", "Czech Republic": "چک",
+    "Democratic Republic of the Congo": "کنگو دموکراتیک", "Denmark": "دانمارک", "Djibouti": "جیبوتی",
+    "Dominican Republic": "جمهوری دومینیکن", "East Timor": "تیمور شرقی", "Ecuador": "اکوادور",
+    "Egypt": "مصر", "El Salvador": "السالوادور", "Equatorial Guinea": "گینه استوایی", "Eritrea": "اریتره",
+    "Estonia": "استونی", "Ethiopia": "اتیوپی", "Fiji": "فیجی", "Finland": "فنلاند", "France": "فرانسه",
+    "Gabon": "گابن", "Gambia": "گامبیا", "Georgia": "گرجستان", "Germany": "آلمان", "Ghana": "غنا",
+    "Greece": "یونان", "Guatemala": "گواتمالا", "Guinea": "گینه", "Guinea-Bissau": "گینه بیسائو",
+    "Guyana": "گویان", "Haiti": "هائیتی", "Honduras": "هندوراس", "Hungary": "مجارستان",
+    "Iceland": "ایسلند", "India": "هند", "Indonesia": "اندونزی", "Iran": "ایران", "Iraq": "عراق",
+    "Ireland": "ایرلند", "Israel": "اسرائیل", "Italy": "ایتالیا", "Ivory Coast": "ساحل عاج",
+    "Jamaica": "جامائیکا", "Japan": "ژاپن", "Jordan": "اردن", "Kazakhstan": "قزاقستان",
+    "Kenya": "کنیا", "Kuwait": "کویت", "Kyrgyzstan": "قرقیزستان", "Laos": "لائوس", "Latvia": "لتونی",
+    "Lebanon": "لبنان", "Lesotho": "لسوتو", "Liberia": "لیبریا", "Libya": "لیبی", "Lithuania": "لیتوانی",
+    "Luxembourg": "لوکزامبورگ", "Macedonia": "مقدونیه", "Madagascar": "ماداگاسکار", "Malawi": "مالاوی",
+    "Malaysia": "مالزی", "Mali": "مالی", "Malta": "مالت", "Mauritania": "موریتانی", "Mauritius": "موریس",
+    "Mexico": "مکزیک", "Moldova": "مولداوی", "Mongolia": "مغولستان", "Montenegro": "مونته‌نگرو",
+    "Morocco": "مراکش", "Mozambique": "موزامبیک", "Myanmar": "میانمار", "Namibia": "نامیبیا",
+    "Nepal": "نپال", "Netherlands": "هلند", "New Zealand": "نیوزیلند", "Nicaragua": "نیکاراگوئه",
+    "Niger": "نیجر", "Nigeria": "نیجریه", "North Korea": "کره شمالی", "Norway": "نروژ", "Oman": "عمان",
+    "Pakistan": "پاکستان", "Panama": "پاناما", "Papua New Guinea": "پاپوآ گینه نو", "Paraguay": "پاراگوئه",
+    "Peru": "پرو", "Philippines": "فیلیپین", "Poland": "لهستان", "Portugal": "پرتغال", "Qatar": "قطر",
+    "Romania": "رومانی", "Russia": "روسیه", "Rwanda": "رواندا", "Saudi Arabia": "عربستان",
+    "Senegal": "سنگال", "Serbia": "صربستان", "Sierra Leone": "سیرالئون", "Singapore": "سنگاپور",
+    "Slovakia": "اسلواکی", "Slovenia": "اسلوونی", "Somalia": "سومالی", "South Africa": "آفریقای جنوبی",
+    "South Korea": "کره جنوبی", "Spain": "اسپانیا", "Sri Lanka": "سری‌لانکا", "Sudan": "سودان",
+    "Suriname": "سورینام", "Swaziland": "اسواتینی", "Sweden": "سوئد", "Switzerland": "سوئیس",
+    "Syria": "سوریه", "Taiwan": "تایوان", "Tajikistan": "تاجیکستان", "Tanzania": "تانزانیا",
+    "Thailand": "تایلند", "Togo": "توگو", "Trinidad and Tobago": "ترینیداد", "Tunisia": "تونس",
+    "Turkey": "ترکیه", "Turkmenistan": "ترکمنستان", "Uganda": "اوگاندا", "Ukraine": "اوکراین",
+    "United Arab Emirates": "امارات", "United Kingdom": "انگلیس", "United States of America": "آمریکا",
+    "Uruguay": "اروگوئه", "Uzbekistan": "ازبکستان", "Venezuela": "ونزوئلا", "Vietnam": "ویتنام",
+    "Yemen": "یمن", "Zambia": "زامبیا", "Zimbabwe": "زیمبابوه", "Antarctica": "قطب جنوب"
+};
+
+let countries = {};
+let player = null;
+let year = 2027, month = 1, turn = 1;
+let map, geoLayer;
+let selectedCountry = null;
+let trades = {};
+let allCountryNames = [];
+
+function generateStats(name) {
+    if (predefined[name]) {
+        const d = JSON.parse(JSON.stringify(predefined[name]));
+        d.allies = [];
+        d.enemies = [];
+        return d;
+    }
+    // تولید تصادفی معقول برای کشورهای کوچک
+    const seed = name.split('').reduce((a,c)=>a+c.charCodeAt(0),0);
+    const rnd = (min,max) => min + ((seed * 9301 + 49297) % 233280) / 233280 * (max-min);
+    const pop = Math.max(0.1, Math.round(rnd(0.5, 40)*10)/10);
+    const army = Math.max(1, Math.round(rnd(5, 200)));
+    const gdp = Math.max(5, Math.round(rnd(10, 400)));
+    const ind = Math.round(rnd(15, 70));
+    const oil = Math.round(rnd(0, 15));
+    const stab = Math.round(rnd(30, 85));
+    const tech = Math.round(rnd(25, 75));
+    const treasury = Math.round(rnd(10, 150));
+    return {
+        name: persianNames[name] || name,
+        pop, army, gdp, ind, oil, stab, tech, treasury,
+        allies: [], enemies: []
+    };
+}
+
+function initSelect() {
+    // اول لیست کشورها را از GeoJSON می‌گیریم
+    fetch('countries.geojson')
+        .then(r => r.json())
+        .then(data => {
+            allCountryNames = data.features.map(f => f.properties.name).filter(n => n && n !== 'Antarctica');
+            allCountryNames.sort((a,b) => (persianNames[a]||a).localeCompare(persianNames[b]||b, 'fa'));
+            
+            // ساخت داده‌های همه کشورها
+            allCountryNames.forEach(n => {
+                countries[n] = generateStats(n);
+            });
+            
+            // روابط اولیه برای قدرت‌های بزرگ
+            if (countries["United States of America"]) {
+                countries["United States of America"].allies = ["United Kingdom","Japan","Australia","Canada","South Korea"].filter(x=>countries[x]);
+            }
+            if (countries["China"]) countries["China"].allies = ["Russia"].filter(x=>countries[x]);
+            if (countries["Russia"]) countries["Russia"].allies = ["China"].filter(x=>countries[x]);
+            if (countries["Germany"]) countries["Germany"].allies = ["France"].filter(x=>countries[x]);
+            if (countries["France"]) countries["France"].allies = ["Germany"].filter(x=>countries[x]);
+            if (countries["United Kingdom"]) countries["United Kingdom"].allies = ["United States of America"].filter(x=>countries[x]);
+            if (countries["Japan"]) countries["Japan"].allies = ["United States of America"].filter(x=>countries[x]);
+            
+            renderCountryList();
+            document.getElementById('search-country').oninput = renderCountryList;
+        })
+        .catch(err => {
+            log('خطا در بارگذاری لیست کشورها', 'danger');
+            console.error(err);
+        });
+}
+
+function renderCountryList() {
+    const q = (document.getElementById('search-country').value || '').trim().toLowerCase();
+    const list = document.getElementById('countries-list');
+    list.innerHTML = '';
+    
+    const filtered = allCountryNames.filter(n => {
+        const fa = (countries[n]?.name || n).toLowerCase();
+        return !q || n.toLowerCase().includes(q) || fa.includes(q);
+    });
+    
+    filtered.forEach(eng => {
+        const d = countries[eng];
+        const card = document.createElement('div');
+        card.className = 'country-card' + (selectedCountry === eng ? ' selected' : '');
+        card.innerHTML = `<h3 style="font-size:0.95rem">${d.name}</h3>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">
+                ارتش: ${d.army} | GDP: ${d.gdp}<br>نفت: ${d.oil} | تک: ${d.tech}
+            </div>`;
+        card.onclick = () => {
+            selectedCountry = eng;
+            document.querySelectorAll('.country-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            document.getElementById('start-btn').disabled = false;
+        };
+        list.appendChild(card);
+    });
+}
+
+document.getElementById('start-btn').onclick = () => {
+    player = selectedCountry;
+    document.getElementById('select-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'grid';
+    initMap();
+    updateUI();
+    log(`رهبری ${countries[player].name} را به دست گرفتید. سال ۲۰۲۷ آغاز شد.`, 'info');
+};
+
+function initMap() {
+    map = L.map('map', { center: [20, 20], zoom: 2, minZoom: 2, maxZoom: 7 });
+    
+    fetch('countries.geojson')
+        .then(r => {
+            if (!r.ok) throw new Error('فایل پیدا نشد');
+            return r.json();
+        })
+        .then(data => {
+            geoLayer = L.geoJSON(data, {
+                style: feature => getStyle(feature),
+                onEachFeature: (feature, layer) => {
+                    const name = feature.properties.name;
+                    layer.on('click', () => onCountryClick(name));
+                    layer.bindTooltip(persianNames[name] || name, {sticky: true, direction: 'top'});
+                }
+            }).addTo(map);
+            log('نقشه با موفقیت بارگذاری شد (نسخه سبک).', 'success');
+        })
+        .catch(err => {
+            log('خطا در بارگذاری نقشه! فایل countries.geojson را کنار HTML بگذارید و با سرور محلی باز کنید.', 'danger');
+            console.error(err);
+        });
+}
+
+function getStyle(feature) {
+    const name = feature.properties.name;
+    let cls = 'country-neutral';
+    if (name === player) cls = 'country-player';
+    else if (countries[player]?.enemies.includes(name)) cls = 'country-enemy';
+    else if (countries[player]?.allies.includes(name)) cls = 'country-ally';
+    return { className: 'country-shape ' + cls, weight: 0.7, opacity: 1, fillOpacity: 0.72 };
+}
+
+function refreshMapColors() {
+    if (!geoLayer) return;
+    geoLayer.eachLayer(layer => {
+        const name = layer.feature.properties.name;
+        let cls = 'country-neutral';
+        if (name === player) cls = 'country-player';
+        else if (countries[player]?.enemies.includes(name)) cls = 'country-enemy';
+        else if (countries[player]?.allies.includes(name)) cls = 'country-ally';
+        layer.setStyle({ className: 'country-shape ' + cls, fillOpacity: 0.72 });
+    });
+}
+
+function onCountryClick(name) {
+    if (countries[name]) {
+        const d = countries[name];
+        const rel = name === player ? 'کشور شما' :
+                    countries[player].enemies.includes(name) ? 'دشمن' :
+                    countries[player].allies.includes(name) ? 'متحد' : 'بی‌طرف';
+        log(`📍 ${d.name} | جمعیت: ${d.pop}M | ارتش: ${d.army} | GDP: ${d.gdp} | نفت: ${d.oil} | رابطه: ${rel}`, 'info');
+    } else {
+        log(`📍 ${name}`, 'info');
+    }
+}
+
+function updateUI() {
+    const c = countries[player];
+    document.getElementById('player-title').textContent = c.name;
+    document.getElementById('year').textContent = year;
+    document.getElementById('month').textContent = month;
+    document.getElementById('turn').textContent = turn;
+    document.getElementById('s-pop').textContent = c.pop + ' میلیون';
+    document.getElementById('s-army').textContent = c.army.toLocaleString();
+    document.getElementById('s-gdp').textContent = c.gdp.toLocaleString();
+    document.getElementById('s-ind').textContent = c.ind;
+    document.getElementById('s-oil').textContent = c.oil;
+    document.getElementById('s-stab').textContent = c.stab + '%';
+    document.getElementById('s-tech').textContent = c.tech;
+    document.getElementById('s-treasury').textContent = Math.floor(c.treasury).toLocaleString();
+    document.getElementById('s-income').textContent = '+' + Math.floor(calcIncome(c));
+    document.getElementById('s-allies').textContent = c.allies.length ? c.allies.map(a => countries[a]?.name || a).join('، ') : 'هیچ‌کس';
+    document.getElementById('s-enemies').textContent = c.enemies.length ? c.enemies.map(e => countries[e]?.name || e).join('، ') : 'هیچ‌کس';
+    refreshMapColors();
+}
+
+function calcIncome(c) {
+    let base = c.gdp * 0.012;
+    base *= (c.stab / 100);
+    base *= (1 + c.ind / 200);
+    base *= (1 + c.tech / 300);
+    base += c.oil * 8;
+    if (trades[player]) base *= 1.12;
+    return base;
+}
+
+function log(msg, type = '') {
+    const box = document.getElementById('log');
+    const p = document.createElement('p');
+    p.className = 'log-' + type;
+    p.textContent = `[نوبت ${turn}] ${msg}`;
+    box.prepend(p);
+}
+
+function openModal(type) {
+    const c = countries[player];
+    if (type === 'war') {
+        const sel = document.getElementById('war-target');
+        sel.innerHTML = '';
+        Object.keys(countries).forEach(n => {
+            if (n !== player && !c.allies.includes(n) && !c.enemies.includes(n)) {
+                sel.innerHTML += `<option value="${n}">${countries[n].name}</option>`;
+            }
+        });
+        if (!sel.innerHTML) { log('کشوری برای جنگ باقی نمانده.', 'warning'); return; }
+    }
+    if (type === 'battle') {
+        const sel = document.getElementById('battle-target');
+        sel.innerHTML = '';
+        c.enemies.forEach(n => {
+            if (countries[n]) sel.innerHTML += `<option value="${n}">${countries[n].name}</option>`;
+        });
+        if (!sel.innerHTML) { log('با کسی در جنگ نیستید.', 'warning'); return; }
+    }
+    if (type === 'diplo') {
+        updateDiploTargets();
+        document.getElementById('diplo-action').onchange = updateDiploTargets;
+    }
+    if (type === 'trade') {
+        const sel = document.getElementById('trade-target');
+        sel.innerHTML = '';
+        Object.keys(countries).forEach(n => {
+            if (n !== player && !c.enemies.includes(n)) {
+                sel.innerHTML += `<option value="${n}">${countries[n].name}</option>`;
+            }
+        });
+    }
+    document.getElementById('modal-' + type).classList.add('active');
+}
+
+function closeModal(type) {
+    document.getElementById('modal-' + type).classList.remove('active');
+}
+
+function updateDiploTargets() {
+    const action = document.getElementById('diplo-action').value;
+    const sel = document.getElementById('diplo-target');
+    const c = countries[player];
+    sel.innerHTML = '';
+    if (action === 'ally') {
+        Object.keys(countries).forEach(n => {
+            if (n !== player && !c.allies.includes(n) && !c.enemies.includes(n)) {
+                sel.innerHTML += `<option value="${n}">${countries[n].name}</option>`;
+            }
+        });
+    } else {
+        c.enemies.forEach(n => {
+            if (countries[n]) sel.innerHTML += `<option value="${n}">${countries[n].name}</option>`;
+        });
+    }
+}
+
+function recruitArmy() {
+    const amount = parseInt(document.getElementById('recruit-amount').value);
+    if (!amount || amount < 1) return;
+    const cost = amount * 20;
+    const c = countries[player];
+    if (c.treasury < cost) log('خزانه کافی نیست!', 'danger');
+    else {
+        c.treasury -= cost;
+        c.army += amount;
+        log(`${amount} واحد نیرو استخدام شد.`, 'success');
+        updateUI();
+    }
+    closeModal('recruit');
+    document.getElementById('recruit-amount').value = '';
+}
+
+function buildIndustry() {
+    const c = countries[player];
+    if (c.treasury < 150) { log('حداقل ۱۵۰ خزانه نیاز است.', 'danger'); return; }
+    c.treasury -= 150;
+    const gain = 3 + Math.floor(Math.random() * 5);
+    c.ind = Math.min(100, c.ind + gain);
+    log(`صنعت +${gain} شد (الان ${c.ind}).`, 'success');
+    updateUI();
+    closeModal('build');
+}
+
+function improveTech() {
+    const c = countries[player];
+    if (c.treasury < 80) { log('خزانه کافی نیست.', 'danger'); return; }
+    c.treasury -= 80;
+    const gain = 1 + Math.floor(Math.random() * 3);
+    c.tech = Math.min(100, c.tech + gain);
+    log(`تکنولوژی +${gain} → ${c.tech}`, 'success');
+    updateUI();
+}
+
+function declareWar() {
+    const target = document.getElementById('war-target').value;
+    if (!countries[target]) return;
+    countries[player].enemies.push(target);
+    countries[target].enemies.push(player);
+    log(`🔥 جنگ با ${countries[target].name} اعلام شد!`, 'danger');
+    updateUI();
+    closeModal('war');
+}
+
+function fightBattle() {
+    const enemyName = document.getElementById('battle-target').value;
+    const c = countries[player];
+    const e = countries[enemyName];
+    if (!e) return;
+
+    const pPower = c.army * (1 + c.tech/100) * (0.85 + Math.random()*0.3);
+    const ePower = e.army * (1 + e.tech/100) * (0.85 + Math.random()*0.3);
+
+    if (pPower > ePower * 1.15) {
+        const loss = 8 + Math.floor(Math.random()*15);
+        const eLoss = 25 + Math.floor(Math.random()*35);
+        c.army = Math.max(5, c.army - loss);
+        e.army = Math.max(5, e.army - eLoss);
+        c.treasury += 40 + Math.floor(Math.random()*80);
+        e.stab = Math.max(15, e.stab - 9);
+        e.gdp = Math.max(5, e.gdp - Math.min(80, Math.floor(e.gdp*0.1)));
+
+        if (e.army < c.army * 0.35 && Math.random() < 0.4) {
+            log(`🏆 پیروزی قاطع! بخشی از خاک ${countries[enemyName].name} الحاق شد.`, 'success');
+            c.gdp += Math.floor(e.gdp * 0.2);
+            c.oil += Math.floor(e.oil * 0.25);
+            c.pop = Math.round((c.pop + e.pop * 0.12)*10)/10;
+            e.army = Math.floor(e.army * 0.4);
+            e.gdp = Math.floor(e.gdp * 0.7);
+            e.stab = Math.max(15, e.stab - 15);
+        } else {
+            log(`🏆 پیروزی مقابل ${countries[enemyName].name}! تلفات شما: ${loss} | دشمن: ${eLoss}`, 'success');
+        }
+    } else if (ePower > pPower * 1.15) {
+        const loss = 25 + Math.floor(Math.random()*30);
+        c.army = Math.max(5, c.army - loss);
+        e.army = Math.max(5, e.army - (8 + Math.floor(Math.random()*12)));
+        c.stab = Math.max(15, c.stab - 8);
+        log(`💀 شکست مقابل ${countries[enemyName].name}. تلفات: ${loss}`, 'danger');
+    } else {
+        const loss = 15 + Math.floor(Math.random()*15);
+        c.army = Math.max(5, c.army - loss);
+        e.army = Math.max(5, e.army - loss);
+        log(`⚖️ نبرد مساوی با ${countries[enemyName].name}. تلفات حدود ${loss}`, 'warning');
+    }
+    updateUI();
+    closeModal('battle');
+}
+
+function doDiplomacy() {
+    const action = document.getElementById('diplo-action').value;
+    const target = document.getElementById('diplo-target').value;
+    if (!target || !countries[target]) return;
+    const c = countries[player];
+
+    if (action === 'ally') {
+        const chance = 35 + (c.tech - countries[target].tech)/2 + (c.stab - 50)/3;
+        if (Math.random()*100 < chance) {
+            c.allies.push(target);
+            countries[target].allies.push(player);
+            log(`✅ اتحاد با ${countries[target].name} امضا شد!`, 'success');
+        } else log(`❌ ${countries[target].name} اتحاد را رد کرد.`, 'danger');
+    } else {
+        if (Math.random() < 0.58) {
+            c.enemies = c.enemies.filter(x => x !== target);
+            countries[target].enemies = countries[target].enemies.filter(x => x !== player);
+            log(`🕊️ صلح با ${countries[target].name} برقرار شد.`, 'success');
+        } else log(`❌ ${countries[target].name} صلح را نپذیرفت.`, 'danger');
+    }
+    updateUI();
+    closeModal('diplo');
+}
+
+function makeTrade() {
+    const target = document.getElementById('trade-target').value;
+    if (!target) return;
+    trades[player] = true;
+    trades[target] = true;
+    log(`📦 قرارداد تجاری با ${countries[target].name} امضا شد.`, 'success');
+    updateUI();
+    closeModal('trade');
+}
+
+function nextTurn() {
+    const c = countries[player];
+    const income = calcIncome(c);
+    c.treasury += income;
+    const armyCost = c.army * 0.12;
+    c.treasury -= armyCost;
+
+    let growth = (Math.random()*6 - 1) + (c.ind - 50)/40 + (c.tech - 70)/50;
+    if (c.stab > 75) growth += 1.5;
+    if (c.stab < 50) growth -= 2;
+    c.gdp = Math.max(5, c.gdp * (1 + growth/100));
+
+    if (c.army > c.pop * 4) c.stab = Math.max(15, c.stab - 3);
+    else c.stab = Math.min(95, c.stab + Math.floor(Math.random()*3) - 1);
+
+    c.pop = Math.round((c.pop + Math.random()*1.5)*10)/10;
+
+    const r = Math.random();
+    if (r < 0.07) {
+        const loss = 20 + Math.floor(Math.random()*40);
+        c.treasury = Math.max(0, c.treasury - loss);
+        log(`📉 بحران اقتصادی! ${loss} واحد از خزانه کم شد.`, 'danger');
+    } else if (r < 0.13) {
+        c.stab = Math.min(95, c.stab + 5);
+        log(`🎉 موج ملی‌گرایی! ثبات افزایش یافت.`, 'success');
+    } else if (r < 0.18) {
+        c.oil += 1 + Math.floor(Math.random()*3);
+        log(`⛽ کشف میدان نفتی جدید!`, 'success');
+    }
+
+    month += 3;
+    if (month > 12) { month = 1; year++; }
+    turn++;
+
+    log(`درآمد: +${Math.floor(income)} | هزینه ارتش: -${Math.floor(armyCost)} | رشد GDP: ${growth.toFixed(1)}%`, 'info');
+    updateUI();
+}
+
+// شروع
+initSelect();
+
+// ========== PWA Service Worker ==========
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('Service Worker registered', reg.scope))
+            .catch(err => console.log('SW registration failed', err));
+    });
+}
+</script>
+</body>
+</html>
 
